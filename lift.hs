@@ -1,7 +1,37 @@
 import Debug.Trace
 
+-- Expr    ::= "\" String "->" Expr
+-- Expr    ::= AppExpr
+-- AppExpr ::= Expr VarExpr
+-- AppExpr ::= VarExpr
+-- VarExpr ::= Var String
+-- VarExpr ::= Number Int
+-- VarExpr ::= Boolean Bool
+-- VarExpr ::= S | K | I | B | C | W
+-- VarExpr ::= '(' Expr ')'
+
 data Expr = Var String | Number Int | Boolean Bool | App Expr Expr | Abs String Expr | S | K | I | B | C | W
     deriving (Show)
+
+pp :: Expr -> String
+pp (Abs s e) = "\\" <> s <> " -> " <> pp e 
+pp e = ppapp e
+
+ppapp :: Expr -> String
+ppapp (App f x) = pp f <> " " <> ppvar x
+ppapp e = ppvar e
+
+ppvar :: Expr -> String
+ppvar (Var s) = s
+ppvar (Number n) = show n
+ppvar (Boolean b) = show b
+ppvar (S) = "S"
+ppvar (K) = "K"
+ppvar (I) = "I"
+ppvar (B) = "B"
+ppvar (C) = "C"
+ppvar (W) = "W"
+ppvar e = "(" <> pp e <> ")"
 
 gen :: Expr -> String
 gen (Var "plus") = "mkPLUS()"
@@ -55,8 +85,10 @@ simplify (App e1 e2) = App (simplify e1) (simplify e2)    -- No match so simplif
 simplify e = e    -- Base case
 
 main =
-     print (translate fac) >>
-     print (simplify (translate fac)) >>
+     print fac >>
+     putStrLn (pp fac) >>
+     putStrLn (pp (translate fac)) >>
+     putStrLn (pp (simplify (translate fac))) >>
      putStr "Noderef facp = " >>
      putStrLn (gen (simplify (translate fac)) ++ ";")
   where
