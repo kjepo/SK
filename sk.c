@@ -4,7 +4,7 @@
 
 /*
  * 
- * Graph reduction                    5/5/90 --kjepo
+ * Graph reduction                 5/5/90 --kjepo, revised again in 2023!
  *
  * [Turner '79, A new implementation technique for Applicative Languages]
  *
@@ -34,8 +34,6 @@ Noderef stack[100];
 int sp;
 
 void reduce(Noderef graph, int stack_bot);
-
-/*================================================================*/
 
 Noderef mknode(Nodetype tag) {
   Noderef p = (Noderef) malloc(sizeof(struct Node));
@@ -70,91 +68,58 @@ Noderef mkI()           { return mknode(I); }
 Noderef mkTRUE()        { return mknode(TRUE); }
 Noderef mkFALSE()       { return mknode(FALSE); }
 
-Noderef init() {
+Noderef init() {        /* This function simulates the compiler */
+  Noderef fac = mkapply(0,0);	/* dummy node for recursive function */
 
-  /* 
-   *
-   * This function simulates the compiler.
-   *
-   */
+  Noderef facp = mkapply(mkapply(mkS(), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkEQ()), mknum(0)))), mknum(1))), mkapply(mkapply(mkS(), mkTIMES()), mkapply(mkapply(mkB(), fac), mkapply(mkapply(mkC(), mkMINUS()), mknum(1)))));  
 
-   Noderef 
-       p0 = mkapply(0,0),
-       p1 = mkB(),
-       p2 = mkCOND(),
-       p3 = mkapply(p1, p2),
-       p4 = mkEQ(),
-       p5 = mknum(0),
-       p6 = mkapply(p4, p5),
-       p7 = mkapply(p3, p6),
-       p8 = mkC(),
-       p9 = mkapply(p8, p7),
-       p10 = mknum(1),
-       p11 = mkapply(p9, p10),
-       p12 = mkS(),
-       p13 = mkapply(p12, p11),
-       p14 = mkB(),
-       p15 = mkapply(p14, p0),
-       p16 = mkC(),
-       p17 = mkMINUS(),
-       p18 = mkapply(p16, p17),
-       p19 = mknum(1),
-       p20 = mkapply(p18, p19),
-       p21 = mkapply(p15, p20),
-       p22 = mkS(),
-       p23 = mkTIMES(),
-       p24 = mkapply(p22, p23),
-       p25 = mkapply(p24, p21),
-       p26 = mknum(10),
-       p27 = mkapply(p0, p26);
 
-    left(p0) = p13;
-    right(p0) = p25;
-    return p27;
+
+  left(fac) = left(facp);
+  right(fac) = right(facp);
+  return mkapply(fac, mknum(6));
+}
+
+void doERR() {
+  fprintf(stderr, "Error: a number or a boolean was applied to something (?)");
+  abort();
 }
 
 void doB() { /* B f g x => f (g x) */
   Noderef f, g, x;
-
   assert(sp > 2);
   f = right(stack[sp-1]);
   g = right(stack[sp-2]);
   x = right(stack[sp-3]);
   sp -= 3;
-  /* kind(stack[sp]) = APPLY; */
   left(stack[sp]) = f;
   right(stack[sp]) = mkapply(g, x);
 }
 
 void doC() { /* C f g x => f x g */
   Noderef f, g, x;
-
   assert(sp > 2);
   f = right(stack[sp-1]);
   g = right(stack[sp-2]);
   x = right(stack[sp-3]);
   sp -= 3;
-  /* kind(stack[sp]) = APPLY; */
   left(stack[sp]) = mkapply(f, x);
   right(stack[sp]) = g;
 }
 
 void doS() { /* S x y z => x z (y z) */
   Noderef x, y, z;
-  
   assert(sp > 2);
   x = right(stack[sp-1]);
   y = right(stack[sp-2]);
   z = right(stack[sp-3]);
   sp -= 3;
-  /* kind(stack[sp]) = APPLY; */
   left(stack[sp]) = mkapply(x, z);
   right(stack[sp]) = mkapply(y, z);
 }
 
 void doK() { /* K x y => x */
   Noderef x;
-
   assert(sp > 1);
   x = right(stack[sp-1]);
   sp -= 2;
@@ -163,7 +128,6 @@ void doK() { /* K x y => x */
 
 void doI() { /* I x => x */
   Noderef x;
-
   assert(sp > 0);
   x = right(stack[sp-1]);
   sp -= 1;
@@ -172,19 +136,16 @@ void doI() { /* I x => x */
 
 void doY() { /* Y h = h(Y h) = h(h(h(....))) */
   Noderef h;
-
   assert(sp > 0);
   h = right(stack[sp-1]);
   sp -= 1;
-  /* kind(stack[sp]) = APPLY; */
   left(stack[sp]) = h;
   right(stack[sp]) = stack[sp]; /* tie the knot */
 }
 
-void doPLUS() { /* PLUS x y => x+y */
+void doBinaryOp(op) {
   Noderef x, y;
   int xval, yval;
-
   assert(sp > 1);
   x = right(stack[sp-1]);
   y = right(stack[sp-2]);
@@ -200,56 +161,43 @@ void doPLUS() { /* PLUS x y => x+y */
   yval = num(y);
   sp -= 2;
   kind(stack[sp]) = NUM;
-  num(stack[sp]) = xval + yval;
+  switch (op) {
+  case '+':
+    num(stack[sp]) = xval + yval;
+    break;
+  case '-':
+    num(stack[sp]) = xval - yval;
+    break;
+  case '*':
+    num(stack[sp]) = xval * yval;
+    break;
+  case '=':
+    kind(stack[sp]) = (xval == yval ? TRUE : FALSE);
+    break;
+  default:
+    fprintf(stderr, "Error: doBinaryOp called with %c\n", op);
+    abort();
+  }
+}
+
+void doPLUS() { /* PLUS x y => x+y */
+  doBinaryOp('+');
 }
 
 void doMINUS() { /* MINUS x y => x-y */
-  Noderef x, y;
-  int xval, yval;
-
-  assert(sp > 1);
-  x = right(stack[sp-1]);
-  y = right(stack[sp-2]);
-  if (kind(x) != NUM) {
-    reduce(x, sp);		/* recursively evaluate x */
-    x = stack[sp];
-  }
-  xval = num(x);
-  if (kind(y) != NUM) {
-    reduce(y, sp);
-    y = stack[sp];
-  }
-  yval = num(y);
-  sp -= 2;
-  kind(stack[sp]) = NUM;
-  num(stack[sp]) = xval - yval;
+  doBinaryOp('-');
 }
 
 void doTIMES() { /* TIMES x y => x*y */
-  Noderef x, y;
-  int xval, yval;
+  doBinaryOp('*');
+}
 
-  assert(sp > 1);
-  x = right(stack[sp-1]);
-  y = right(stack[sp-2]);
-  if (kind(x) != NUM) {
-    reduce(x, sp);		/* recursively evaluate x */
-    x = stack[sp];
-  }
-  xval = num(x);
-  if (kind(y) != NUM) {
-    reduce(y, sp);
-    y = stack[sp];
-  }
-  yval = num(y);
-  sp -= 2;
-  kind(stack[sp]) = NUM;
-  num(stack[sp]) = xval * yval;
+void doEQ() { /* EQ x y => TRUE if x=y, EQ x y => FALSE otherwise */
+  doBinaryOp('=');
 }
 
 void doCOND() { /* COND TRUE x y => x, COND FALSE x y => y */
   Noderef pred, tnod, fnod;
-
   assert(sp > 2);
   pred = right(stack[sp-1]);
   tnod = right(stack[sp-2]);
@@ -272,29 +220,8 @@ void doCOND() { /* COND TRUE x y => x, COND FALSE x y => y */
   }
 }
 
-void doEQ() { /* EQ x y => TRUE if x=y, EQ x y => FALSE otherwise */
-  Noderef x, y;
-  int xval, yval;
-
-  assert(sp > 2);
-  x = right(stack[sp-1]);
-  y = right(stack[sp-2]);
-  if (kind(x) != NUM) {
-    reduce(x, sp);
-    x = stack[sp];
-  }
-  xval = num(x);
-  if (kind(y) != NUM) {
-    reduce(y, sp);
-    y = stack[sp];
-  }
-  yval = num(y);
-  sp -= 2;
-  if (xval == yval)
-    kind(stack[sp]) = TRUE;
-  else
-    kind(stack[sp]) = FALSE;
-}
+void (*redfcns[])() = { doERR, doERR, doB, doC, doS, doK, doI, doY,
+  doPLUS, doMINUS, doTIMES, doCOND, doEQ, doERR, doERR };
 
 void push(Noderef n) {
   assert(sp < sizeof(stack));
@@ -304,52 +231,7 @@ void push(Noderef n) {
 void reduction() {
   while (kind(stack[sp]) == APPLY)
     push(left(stack[sp]));
-
-  switch (kind(stack[sp])) {
-  case B:
-    doB();
-    break;
-  case C:
-    doC();
-    break;
-  case S:
-    doS();
-    break;
-  case K:
-    doK();
-    break;
-  case I:
-    doI();
-    break;
-  case Y:
-    doY();
-    break;
-  case PLUS:
-    doPLUS();
-    break;
-  case MINUS:
-    doMINUS();
-    break;
-  case TIMES:
-    doTIMES();
-    break;
-  case COND:
-    doCOND();
-    break;
-  case EQ:
-    doEQ();
-    break;
-  case NUM:
-    fprintf(stderr, "number applied to something.\n");
-    abort();
-  case TRUE:
-  case FALSE:
-    fprintf(stderr, "boolean applied to something.\n");
-    abort();
-  default:
-    fprintf(stderr, "tag field corrupt in node.\n");
-    abort();
-  }
+  redfcns[kind(stack[sp])]();
 }
 
 void reduce(Noderef graph, int stack_bot) {
