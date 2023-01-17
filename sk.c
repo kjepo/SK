@@ -11,7 +11,11 @@
  */
 
 typedef enum {
-  APPLY, NUM, B, C, S, K, I, Y, PLUS, MINUS, TIMES, COND, EQ, TRUE, FALSE
+  APPLY, NUM,
+  B, C, S, K, I, Y, P,
+  HEAD, TAIL, NULLP,
+  PLUS, MINUS, TIMES, COND, EQ,
+  TRUE, FALSE, NIL
 } Nodetype;
 
 typedef struct Node {
@@ -32,6 +36,7 @@ typedef struct Node {
 
 Noderef stack[100];
 int sp;
+int trace = 0;
 
 void reduce(Noderef graph, int stack_bot);
 
@@ -49,12 +54,27 @@ Noderef mkapply(Noderef l, Noderef r) {
   return p;
 }
 
+// not sure if P should be overloaded as both a combinator (w/o arguments)
+// and a node kind, like a cons cell.  Perhaps re-introduce CONS again?
+
+
+Noderef mkpair(Noderef l, Noderef r) {
+  Noderef p = mknode(P);
+  left(p) = l;
+  right(p) = r;
+  return p;
+}
+
+
 Noderef mknum(int i) {
   Noderef p = mknode(NUM);
   num(p) = i;
   return p;
 }
 
+Noderef mkHEAD()        { return mknode(HEAD); }
+Noderef mkTAIL()        { return mknode(TAIL); }
+Noderef mkNULL()        { return mknode(NULLP); }
 Noderef mkPLUS()        { return mknode(PLUS); }
 Noderef mkMINUS()       { return mknode(MINUS); }
 Noderef mkTIMES()       { return mknode(TIMES); }
@@ -65,24 +85,141 @@ Noderef mkC()           { return mknode(C); }
 Noderef mkS()           { return mknode(S); }
 Noderef mkK()           { return mknode(K); }
 Noderef mkI()           { return mknode(I); }
+Noderef mkP()           { return mknode(P); }
+Noderef mkY()           { return mknode(Y); }
 Noderef mkTRUE()        { return mknode(TRUE); }
 Noderef mkFALSE()       { return mknode(FALSE); }
+Noderef mkNIL()         { return mknode(NIL); }
+
+int ppcount;
+void pp(Noderef p);
+
+void pp(Noderef p) {
+
+  if (ppcount++ > 30) {
+    printf("...");
+    return;
+  }
+
+  if (!p)
+    return;
+
+  switch (kind(p)) {
+  case APPLY:
+    printf("apply(");
+    pp(left(p));
+    printf(",");
+    pp(right(p));
+    printf(")");
+    break;
+  case NUM:
+    printf("%d", num(p));
+    break;
+  case TRUE:
+    printf("true");
+    break;
+  case FALSE:
+    printf("false");
+    break;
+  case NIL:
+    printf("nil");
+    break;
+  case P:
+    printf("P(");
+    pp(left(p));
+    printf(",");
+    pp(right(p));
+    printf(")");
+    break;
+  case B:
+    printf("B");
+    break;
+  case C:
+    printf("C");
+    break;
+  case S:
+    printf("S");
+    break;
+  case K:
+    printf("K");
+    break;
+  case I:
+    printf("I");
+    break;
+  case Y:
+    printf("Y");
+    break;
+  case HEAD:
+    printf("head");
+    break;
+  case TAIL:
+    printf("tail");
+    break;
+  case NULLP:
+    printf("null");
+    break;      
+  case PLUS:
+    printf("plus");
+    break;
+  case MINUS:
+    printf("minus");
+    break;
+  case TIMES:
+    printf("times");
+    break;
+  case COND:
+    printf("cond");
+    break;
+  case EQ:
+    printf("eq");
+    break;
+  default:
+    fprintf(stderr, "pp: unknown kind of node: %d\n", kind(p));
+    break;
+  }
+}
+
+void pretty_print(Noderef p, char ch) {
+  ppcount = 0;
+  pp(p);
+  putchar(ch);
+}
 
 Noderef init() {        /* This function simulates the compiler */
+
+  Noderef klen = mkapply(0,0);
+  Noderef klenp = mkapply(mkapply(mkS(), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkNULL())), mknum(0))), mkapply(mkapply(mkB(), mkapply(mkPLUS(), mknum(1))), mkapply(mkapply(mkB(), klen), mkTAIL())));
+  Noderef list12 = mkapply(mkapply(mkP(), mknum(1)), mkapply(mkapply(mkP(), mknum(2)), mkNIL()));
+
+  Noderef klenf = mkapply(klen, list12);
+
+  // printf("list12: "); pretty_print(list12, '\n');
+
+  left(klen) = left(klenp);
+  right(klen) = right(klenp);
+
+  // printf("klen: "); pretty_print(klen, '\n');
+
+  return klenf;
+
+
+  Noderef pgm1 = mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkB()), mkP())), mkapply(mkapply(mkC(), mkP()), mkNIL()));
+  return mkapply(mkapply(pgm1, mknum(3)), mknum(4));  
+
+  Noderef pgm = mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkB()), mkP())), mkI());
+  return mkapply(mkapply(pgm, mknum(3)), mknum(4));
+
   Noderef fac = mkapply(0,0);	/* dummy node for recursive function */
-
   Noderef facp = mkapply(mkapply(mkS(), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkEQ()), mknum(0)))), mknum(1))), mkapply(mkapply(mkS(), mkTIMES()), mkapply(mkapply(mkB(), fac), mkapply(mkapply(mkC(), mkMINUS()), mknum(1)))));  
-
-
 
   left(fac) = left(facp);
   right(fac) = right(facp);
+
   return mkapply(fac, mknum(6));
 }
 
 void doERR() {
-  fprintf(stderr, "Error: a number or a boolean was applied to something (?)");
-  abort();
+  return;
 }
 
 void doB() { /* B f g x => f (g x) */
@@ -176,9 +313,57 @@ void doBinaryOp(op) {
     break;
   default:
     fprintf(stderr, "Error: doBinaryOp called with %c\n", op);
-    abort();
+    exit(1);
   }
 }
+
+void doP() { /* P x y => cons(x,y) */
+  Noderef x, y, z;
+  assert (sp > 1);
+  x = right(stack[sp-1]);
+  y = right(stack[sp-2]);
+  sp -= 2;
+  z = mkpair(x, y);
+  *stack[sp] = *z;
+}
+
+void doHEAD() { /* HEAD x y => x */
+  Noderef x;
+  assert(sp > 0);
+  x = right(stack[sp-1]);
+  sp -= 2;
+  *stack[sp] = *x;
+}
+
+void doTAIL() { /* TAIL x y => y */
+  Noderef y;
+  assert(sp > 1);
+  y = stack[sp-1];
+  y = right(y);
+  y = right(y);
+  sp -= 1;
+  *stack[sp] = *y;
+}
+
+void doNULL() { /* NULL x => TRUE iff x == NIL, else FALSE */
+  Noderef x, y;
+  int xval, yval;
+  assert(sp > 0);
+  x = right(stack[sp-1]);
+  if (kind(x) != P) {
+    reduce(x, sp);		/* recursively evaluate x */
+    x = stack[sp];
+  }
+  if ((kind(x) != P) && (kind(x) != NIL)) {
+    fprintf(stderr, "NULL applied on a non-list.\n");
+    pretty_print(stack[sp], '\n');
+    exit(1);
+  }
+  sp -= 1;
+  kind(stack[sp]) = (kind(x) == NIL ? TRUE : FALSE);
+}
+
+
 
 void doPLUS() { /* PLUS x y => x+y */
   doBinaryOp('+');
@@ -216,12 +401,16 @@ void doCOND() { /* COND TRUE x y => x, COND FALSE x y => y */
     break;
   default:
     fprintf(stderr, "predicate wasn't boolean.\n");
-    abort();
+    exit(1);
   }
 }
 
-void (*redfcns[])() = { doERR, doERR, doB, doC, doS, doK, doI, doY,
-  doPLUS, doMINUS, doTIMES, doCOND, doEQ, doERR, doERR };
+void (*redfcns[])() = {
+  doERR, doERR,			          /* APPLY, NUM */
+  doB, doC, doS, doK, doI, doY, doP,      /* B, C, S, K, I, Y, P */
+  doHEAD, doTAIL, doNULL,		  /* HEAD, TAIL, NULL */
+  doPLUS, doMINUS, doTIMES, doCOND, doEQ, /* PLUS, MINUS, TIMES, COND, EQ */
+  doERR, doERR, doERR };                  /* TRUE, FALSE, NIL */
 
 void push(Noderef n) {
   assert(sp < sizeof(stack));
@@ -236,31 +425,71 @@ void reduction() {
 
 void reduce(Noderef graph, int stack_bot) {
   int save_sp = sp;
-
   sp = stack_bot;
   stack[stack_bot] = graph;
-  while (kind(stack[stack_bot]) == APPLY)
+  while (kind(stack[stack_bot]) == APPLY) {
+    if (trace) {
+      printf("--> "); pretty_print(graph, '\n');
+    }
     reduction();
+    if (trace) {
+      printf("<-- "); pretty_print(graph, '\n');
+    }
+  }
   sp = save_sp;
 }
 
-int main() {
-  Noderef graph;
+void printlist(Noderef);
 
-  graph = init();
-  reduce(graph, 0);
+void print(Noderef graph) {
   switch (kind(graph)) {
   case NUM:
-    printf("%d\n", num(graph));
+    printf("%d", num(graph));
     break;
   case TRUE:
-    printf("true\n");
+    printf("true");
     break;
   case FALSE:
-    printf("false\n");
+    printf("false");
+    break;
+  case NIL:
+    printf("nil");
+    break;
+  case P:
+    printlist(graph);
     break;
   default:
-    fprintf(stderr, "result can not be printed.\n");
-    abort();
+    fprintf(stderr, "result can not be printed, kind=%d\n", kind(graph));
+    pretty_print(graph, '\n');
+    exit(1);
   }
+}
+
+void printlist(Noderef graph) {
+  if (graph == 0)
+    return;
+  pretty_print(left(graph), ':');
+  graph = right(graph);
+  reduce(graph, 0);
+  print(graph);
+}
+
+int main(int argc, char *argv[]) {
+  Noderef graph = init();
+
+  for (int i = 1; i < argc; i++) {
+    if (argv[i][0] == '-') {
+      if (argv[i][1] == 't')
+	trace = 1;
+      if (argv[i][1] == 'h') {
+	fprintf(stderr, "Usage: %s [-th]\n\n-t: trace\n-h: this help\n", argv[0]);
+	exit(0);
+      }
+    }
+  }
+
+  reduce(graph, 0);
+  graph = stack[0];
+  print(graph);
+  printf("\n");
 }
