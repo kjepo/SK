@@ -1,0 +1,1 @@
+def len xs = if (null xs) then 0 else 1 + len(tail xs);

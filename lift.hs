@@ -63,6 +63,11 @@ gen (Var "cond") = "mkCOND()"
 gen (Var "head") = "mkHEAD()"
 gen (Var "tail") = "mkTAIL()"
 gen (Var "null") = "mkNULL()"
+gen (Var "equal") = "mkEQUAL()"
+gen (Var "notequal") = "mkNOTEQUAL()"
+gen (Var "lessthan") = "mkLESSTHAN()"
+gen (Var "greaterthan") = "mkGREATERTHAN()"
+gen (Var "not") = "mkNOT()"
 gen (Var s) = s
 gen (Number n) = "mknum(" ++ (show n) ++ ")"
 gen (App e1 e2) = "mkapply(" ++ gen(e1) ++ ", " ++ gen(e2) ++ ")"
@@ -111,43 +116,23 @@ simplify (App C I) = C    -- C I = C  (kpt)
 simplify (App e1 e2) = App (simplify e1) (simplify e2)    -- No match so simplify children
 simplify e = e    -- Base case
 
+compile :: Expr -> String -> IO ()
+compile e s =
+	--        putStrLn ("// " ++ (pp (translate e))) >>
+        putStrLn ("// " ++ (pp (simplify (translate e)))) >>
+        putStrLn ("DEF(" ++ s ++ ", " ++ (gen (simplify (translate e))) ++ ");")
+
 main =
-     print fac >>
-     putStrLn (pp fac) >>
-     putStrLn (pp (translate fac)) >>
-     putStrLn (pp (simplify (translate fac))) >>
-     putStr "Noderef facp = " >>
-     putStrLn (gen (simplify (translate fac)) ++ ";") >>
-     putStrLn (pp ex1) >>
-     putStrLn (pp (translate ex1)) >>
-     putStrLn (pp (simplify (translate ex1))) >>
-     putStrLn (gen (simplify (translate ex1)) ++ ";") >>
-     putStrLn (pp ex2) >>
-     putStrLn (pp (translate ex2)) >>
-     putStrLn (pp (simplify (translate ex2))) >>
-     putStrLn (gen (simplify (translate ex2)) ++ ";") >>
-     putStrLn (pp klenexpr) >>
-     putStrLn (pp (translate klenexpr)) >>
-     putStrLn (pp (simplify (translate klenexpr))) >>
-     putStrLn (gen (simplify (translate klenexpr)) ++ ";")
-
+     compile list10 "list10"
   where
-     -- fac x = if x = 0 then 1 else x * fac (x-1)
-     -- fac = lambda x: cond =(x,0) 1 *(x, fac(-(x,1))
-     -- fac = lambda x: cond e1 e2 e3  where e1 is =(x,0)  e2 is 1  e3 is *(x, fac(-(x,1)))
-     e1 = App (App (Var "eq") (Var "x")) (Number 0)
-     e2 = Number 1
-     e3 = App (App (Var "times") (Var "x")) (App (Var "fac") (App (App (Var "minus") (Var "x")) (Number 1)))
-     fac = Abs "x" (App (App (App (Var "cond") e1) e2) e3)
-     -- \x.\y.cons(x,y)
-     ex1 = Abs "x" (Abs "y" (App (App P (Var "x")) (Var "y")))
-     ex2 = Abs "x" (Abs "y" (cons (Var "x") (cons (Var "y") (Var "nil"))))
-     cons x y = App (App P x) y
-     -- klen x = if null x then 0 else 1 + klen (tail x)
-     ke1 = App (Var "null") (Var "x")
-     ke2 = Number 0
-     ke4 = App (Var "klen") (App (Var "tail") (Var "x"))
-     ke3 = App (App (Var "plus") (Number 1)) ke4
-     klen = Abs "x" (App (App (App (Var "cond") ke1) ke2) ke3)
-     klenexpr = App klen (cons (Number 1) (cons (Number 2) (Var "nil")))
-
+     sum = (Abs "n" ((App (App (App (Var "cond")  (App (App (Var "equal") (Var "n") ) (Number 0)) ) (Number 0)) (App (App (Var "plus") (Var "n") ) (App (Var "sum")  (App (App (Var "minus") (Var "n") ) (Number 1)) )) ))) 
+     sign = (Abs "x" ((App (App (App (Var "cond")  (App (App (Var "lessthan") (Var "x") ) (Number 0)) ) (App (App (Var "minus") (Number 0)) (Number 1)) ) (App (App (App (Var "cond")  (App (App (Var "greaterthan") (Var "x") ) (Number 0)) ) (Number 1)) (Number 0))))) 
+     fac = (Abs "x" ((App (App (App (Var "cond")  (App (App (Var "equal") (Var "x") ) (Number 0)) ) (Number 1)) (App (App (Var "times") (Var "x") ) (App (Var "fac")  (App (App (Var "minus") (Var "x") ) (Number 1)) )) ))) 
+     len = (Abs "xs" ((App (App (App (Var "cond")  (App (Var "null")  (Var "xs") )) (Number 0)) (App (App (Var "plus") (Number 1)) (App (Var "len")  (App (Var "tail")  (Var "xs") ))) ))) 
+     ack = (Abs "x" ((Abs "y" ((App (App (App (Var "cond")  (App (App (Var "equal") (Var "y") ) (Number 0)) ) (App (App (Var "ack")  (App (App (Var "minus") (Var "x") ) (Number 1)) ) (Number 1))) (App (App (App (Var "cond")  (App (App (Var "equal") (Var "x") ) (Number 0)) ) (App (App (Var "plus") (Var "y") ) (Number 1)) ) (App (App (Var "ack")  (App (App (Var "minus") (Var "x") ) (Number 1)) ) (App (App (Var "ack")  (Var "x") ) (App (App (Var "minus") (Var "y") ) (Number 1)) )))))) )) 
+     --      list2 = (App (App P (App (App P (Number 1)) (Number 2)) ) (Var "nil") ) 
+     list2 = (App (App P (Number 1)) (App (App P (Number 2)) (Var "nil") ) )
+     list3 = (App (App P (Number 1)) (App (App P (Number 2)) (App (App P (Number 3)) (Var "nil") ) ) ) 
+--     list10 = (App (App P (Number 1)) (App (App P (Number 2)) (App (App P (Number 3)) (App (App P (Number 4)) (App (App P (Number 5)) (App (App P (Number 6)) (App (App P (Number 7)) (App (App P (Number 8)) (App (App P (Number 9)) (App (App P (Number 10)) (Var "nil") ) ) ) ) ) ) ) ) ) )   
+     tail12 = (App (Var "tail")  (App (App P (Number 1)) (App (App P (Number 2)) (Var "nil") ) ) )
+     list10 = (App (App P (Number 1)) (App (App P (Number 2)) (App (App P (Number 3)) (App (App P (Number 4)) (App (App P (Number 5)) (App (App P (Number 6)) (App (App P (Number 7)) (App (App P (Number 8)) (App (App P (Number 9)) (App (App P (Number 10)) (Var "nil") ) ) ) ) ) ) ) ) ) ) 

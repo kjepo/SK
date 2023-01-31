@@ -1,0 +1,2 @@
+def sq2 x y = x*x + y*y;
+sq2 3 4

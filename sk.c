@@ -15,7 +15,8 @@ typedef enum {
   B, C, S, K, I, Y, P,
   HEAD, TAIL, NULLP,
   PLUS, MINUS, TIMES, COND, EQ,
-  TRUE, FALSE, NIL
+  TRUE, FALSE, NIL,
+  LT, GT, NE, NOT
 } Nodetype;
 
 typedef struct Node {
@@ -34,7 +35,7 @@ typedef struct Node {
 #define right(p)       ((p)->u_node.apply.right)
 #define num(p)         ((p)->u_node.val)
 
-Noderef stack[100];
+Noderef stack[100000];
 int sp;
 int trace = 0;
 
@@ -57,6 +58,17 @@ Noderef mkapply(Noderef l, Noderef r) {
 // not sure if P should be overloaded as both a combinator (w/o arguments)
 // and a node kind, like a cons cell.  Perhaps re-introduce CONS again?
 
+// we can't implement the P-rule as "do nothing", hoping that it will
+// be reduced when the list encounters null, head or tail.
+// The reason is that head must evaluate its argument recursively
+// and if the argument is P x y, internally represented as
+// apply(apply(...(apply(P, ...))))
+// then the evaluation will never terminate because of all the apply nodes.
+// However, if P x y is rewritten as cons(x,y) we won't have that problem
+// because head can then return x, tail can return y and null can
+// check if it's nil or not.
+
+
 
 Noderef mkpair(Noderef l, Noderef r) {
   Noderef p = mknode(P);
@@ -76,6 +88,11 @@ Noderef mkHEAD()        { return mknode(HEAD); }
 Noderef mkTAIL()        { return mknode(TAIL); }
 Noderef mkNULL()        { return mknode(NULLP); }
 Noderef mkPLUS()        { return mknode(PLUS); }
+Noderef mkEQUAL()       { return mknode(EQ); }
+Noderef mkNOTEQUAL()    { return mknode(NE); }
+Noderef mkLESSTHAN()    { return mknode(LT); }
+Noderef mkGREATERTHAN() { return mknode(GT); }
+Noderef mkNOT()         { return mknode(NOT); }
 Noderef mkMINUS()       { return mknode(MINUS); }
 Noderef mkTIMES()       { return mknode(TIMES); }
 Noderef mkCOND()        { return mknode(COND); }
@@ -185,37 +202,57 @@ void pretty_print(Noderef p, char ch) {
   putchar(ch);
 }
 
+#define DEF(name, p)	 \
+  Noderef name = mkapply(0,0);	 \
+  Noderef name##body = p;	 \
+  left(name) = left(name##body); \
+  right(name) = right(name##body); 
+
+
+
 Noderef init() {        /* This function simulates the compiler */
 
-  Noderef klen = mkapply(0,0);
-  Noderef klenp = mkapply(mkapply(mkS(), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkNULL())), mknum(0))), mkapply(mkapply(mkB(), mkapply(mkPLUS(), mknum(1))), mkapply(mkapply(mkB(), klen), mkTAIL())));
-  Noderef list12 = mkapply(mkapply(mkP(), mknum(1)), mkapply(mkapply(mkP(), mknum(2)), mkNIL()));
+  // def sign x = if x < 0 then -1 else (if x > 0 then 1 else 0);
+  // S (C (B cond (C lessthan 0)) (minus 0 1)) (C (C (B cond (C greaterthan 0)) 1) 0)
+  DEF(sign, mkapply(mkapply(mkS(), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkLESSTHAN()), mknum(0)))), mkapply(mkapply(mkMINUS(), mknum(0)), mknum(1)))), mkapply(mkapply(mkC(), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkGREATERTHAN()), mknum(0)))), mknum(1))), mknum(0))));
 
-  Noderef klenf = mkapply(klen, list12);
+  // def sum n = if n == 0 then 0 else n + sum(n-1);
+  // S (C (B cond (C equal 0)) 0) (S plus (B sum (C minus 1)))
+  DEF(sum, mkapply(mkapply(mkS(), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkEQUAL()), mknum(0)))), mknum(0))), mkapply(mkapply(mkS(), mkPLUS()), mkapply(mkapply(mkB(), sum), mkapply(mkapply(mkC(), mkMINUS()), mknum(1))))));
 
-  // printf("list12: "); pretty_print(list12, '\n');
+  // def fac x = if x==0 then 1 else x*fac(x-1);
+  // S (C (B cond (C equal 0)) 1) (S times (B fac (C minus 1)))
+  DEF(fak, mkapply(mkapply(mkS(), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkEQUAL()), mknum(0)))), mknum(1))), mkapply(mkapply(mkS(), mkTIMES()), mkapply(mkapply(mkB(), fak), mkapply(mkapply(mkC(), mkMINUS()), mknum(1))))));
 
-  left(klen) = left(klenp);
-  right(klen) = right(klenp);
+  // def len xs = if (null xs) then 0 else 1 + len(tail xs);
+  // S (C (B cond null) 0) (B (plus 1) (B len tail))
+  DEF(len, mkapply(mkapply(mkS(), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkNULL())), mknum(0))), mkapply(mkapply(mkB(), mkapply(mkPLUS(), mknum(1))), mkapply(mkapply(mkB(), len), mkTAIL()))));
 
-  // printf("klen: "); pretty_print(klen, '\n');
+  // tail (P 1 (P 2 nil))
+  DEF(tail12, mkapply(mkTAIL(), mkapply(mkapply(mkP(), mknum(1)), mkapply(mkapply(mkP(), mknum(2)), mkNIL()))));
 
-  return klenf;
+  //  Noderef list_12 = mkapply(mkapply(mkP(), mknum(1)), mkapply(mkapply(mkP(), mknum(2)), mkNIL()));
+     DEF(list_12, mkapply(mkapply(mkP(), mknum(1)), mkapply(mkapply(mkP(), mknum(2)), mkNIL())));
+
+   DEF(list2, mkapply(mkapply(mkP(), mknum(1)), mkapply(mkapply(mkP(), mknum(2)), mkNIL())));
+   DEF(list3, mkapply(mkapply(mkP(), mknum(1)), mkapply(mkapply(mkP(), mknum(2)), mkapply(mkapply(mkP(), mknum(3)), mkNIL()))));
+
+   // P 1 (P 2 (P 3 (P 4 (P 5 (P 6 (P 7 (P 8 (P 9 (P 10 nil)))))))))
+   DEF(list10, mkapply(mkapply(mkP(), mknum(1)), mkapply(mkapply(mkP(), mknum(2)), mkapply(mkapply(mkP(), mknum(3)), mkapply(mkapply(mkP(), mknum(4)), mkapply(mkapply(mkP(), mknum(5)), mkapply(mkapply(mkP(), mknum(6)), mkapply(mkapply(mkP(), mknum(7)), mkapply(mkapply(mkP(), mknum(8)), mkapply(mkapply(mkP(), mknum(9)), mkapply(mkapply(mkP(), mknum(10)), mkNIL())))))))))));
+
+   DEF(pgm, mkapply(len, list10));
+   return pgm;
+
+   
+  // def ack x y = if y==0 then ack (x-1) 1 else (if x==0 then y+1 else ack (x-1) (ack x (y-1)));
+  // S (B S (B (C (B cond (C equal 0))) (C (B ack (C minus 1)) 1))) (S (B S (C (B B (B cond (C equal 0))) (C plus 1))) (S (B B (B ack (C minus 1))) (C (B B ack) (C minus 1))))
+  DEF(ack, mkapply(mkapply(mkS(), mkapply(mkapply(mkB(), mkS()), mkapply(mkapply(mkB(), mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkEQUAL()), mknum(0))))), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), ack), mkapply(mkapply(mkC(), mkMINUS()), mknum(1)))), mknum(1))))), mkapply(mkapply(mkS(), mkapply(mkapply(mkB(), mkS()), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkB()), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkEQUAL()), mknum(0))))), mkapply(mkapply(mkC(), mkPLUS()), mknum(1))))), mkapply(mkapply(mkS(), mkapply(mkapply(mkB(), mkB()), mkapply(mkapply(mkB(), ack), mkapply(mkapply(mkC(), mkMINUS()), mknum(1))))), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkB()), ack)), mkapply(mkapply(mkC(), mkMINUS()), mknum(1)))))));
 
 
-  Noderef pgm1 = mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkB()), mkP())), mkapply(mkapply(mkC(), mkP()), mkNIL()));
-  return mkapply(mkapply(pgm1, mknum(3)), mknum(4));  
-
-  Noderef pgm = mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkB()), mkP())), mkI());
-  return mkapply(mkapply(pgm, mknum(3)), mknum(4));
-
-  Noderef fac = mkapply(0,0);	/* dummy node for recursive function */
-  Noderef facp = mkapply(mkapply(mkS(), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkEQ()), mknum(0)))), mknum(1))), mkapply(mkapply(mkS(), mkTIMES()), mkapply(mkapply(mkB(), fac), mkapply(mkapply(mkC(), mkMINUS()), mknum(1)))));  
-
-  left(fac) = left(facp);
-  right(fac) = right(facp);
-
-  return mkapply(fac, mknum(6));
+  //  return mkapply(mkapply(ack, mknum(3)), mknum(8));
+  //  return mkapply(sign, mknum(0));
+  //  return mkapply(sum, mknum(10));
+  //  return mkapply(fak, mknum(6));
 }
 
 void doERR() {
@@ -280,6 +317,29 @@ void doY() { /* Y h = h(Y h) = h(h(h(....))) */
   right(stack[sp]) = stack[sp]; /* tie the knot */
 }
 
+void doUnaryOp(op) {
+  Noderef x;
+  int xval;
+  assert(sp > 0);
+  x = right(stack[sp-1]);
+  if (kind(x) != NUM) {
+    reduce(x, sp);		/* recursively evaluate x */
+    x = stack[sp];
+  }
+  xval = num(x);
+  sp -= 1;
+  kind(stack[sp]) = NUM;
+  switch (op) {
+  case '!':
+    num(stack[sp]) = !xval;
+    break;
+  default:
+    fprintf(stderr, "Error: doUnaryOp called with %c\n", op);
+    exit(1);
+  }
+}
+
+
 void doBinaryOp(op) {
   Noderef x, y;
   int xval, yval;
@@ -311,6 +371,15 @@ void doBinaryOp(op) {
   case '=':
     kind(stack[sp]) = (xval == yval ? TRUE : FALSE);
     break;
+  case '#':
+    kind(stack[sp]) = (xval != yval ? TRUE : FALSE);
+    break;
+  case '<':
+    kind(stack[sp]) = (xval < yval ? TRUE : FALSE);
+    break;
+  case '>':
+    kind(stack[sp]) = (xval > yval ? TRUE : FALSE);
+    break;
   default:
     fprintf(stderr, "Error: doBinaryOp called with %c\n", op);
     exit(1);
@@ -337,7 +406,7 @@ void doHEAD() { /* HEAD x y => x */
 
 void doTAIL() { /* TAIL x y => y */
   Noderef y;
-  assert(sp > 1);
+  assert(sp > 0);
   y = stack[sp-1];
   y = right(y);
   y = right(y);
@@ -363,23 +432,16 @@ void doNULL() { /* NULL x => TRUE iff x == NIL, else FALSE */
   kind(stack[sp]) = (kind(x) == NIL ? TRUE : FALSE);
 }
 
+void doEQUAL()    { doBinaryOp('='); }
+void doPLUS()     { doBinaryOp('+'); }
+void doMINUS()    { doBinaryOp('-'); } /* MINUS x y => x-y */
+void doTIMES()    { doBinaryOp('*'); }
+void doEQ()       { doBinaryOp('='); } /* EQ x y => TRUE if x=y, EQ x y => FALSE otherwise */
+void doNE()       { doBinaryOp('#'); }
+void doLT()       { doBinaryOp('<'); }
+void doGT()       { doBinaryOp('>'); }
+void doNOT()      { doUnaryOp('!'); }
 
-
-void doPLUS() { /* PLUS x y => x+y */
-  doBinaryOp('+');
-}
-
-void doMINUS() { /* MINUS x y => x-y */
-  doBinaryOp('-');
-}
-
-void doTIMES() { /* TIMES x y => x*y */
-  doBinaryOp('*');
-}
-
-void doEQ() { /* EQ x y => TRUE if x=y, EQ x y => FALSE otherwise */
-  doBinaryOp('=');
-}
 
 void doCOND() { /* COND TRUE x y => x, COND FALSE x y => y */
   Noderef pred, tnod, fnod;
@@ -410,7 +472,9 @@ void (*redfcns[])() = {
   doB, doC, doS, doK, doI, doY, doP,      /* B, C, S, K, I, Y, P */
   doHEAD, doTAIL, doNULL,		  /* HEAD, TAIL, NULL */
   doPLUS, doMINUS, doTIMES, doCOND, doEQ, /* PLUS, MINUS, TIMES, COND, EQ */
-  doERR, doERR, doERR };                  /* TRUE, FALSE, NIL */
+  doERR, doERR, doERR,                    /* TRUE, FALSE, NIL */
+  doLT, doGT, doNE, doNOT		  /* LT, GT, NE, NOT */
+};
 
 void push(Noderef n) {
   assert(sp < sizeof(stack));
