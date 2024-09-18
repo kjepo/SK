@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <assert.h>
 
@@ -33,8 +34,6 @@ typedef struct Node {
   int visited;
 } *Noderef;
 
-Noderef graph, root;
-
 #define kind(p)        ((p)->kind)
 #define left(p)        ((p)->u_node.apply.left)
 #define right(p)       ((p)->u_node.apply.right)
@@ -42,10 +41,12 @@ Noderef graph, root;
 #define nodenumber(p)  ((p)->nodenumber)
 #define visited(p)     ((p)->visited)
 
+Noderef graph, root;
 Noderef stack[100000];
 int sp;
 int trace = 0;
 int dag = 0;
+FILE *dagfp;
 int nodectr = 0;
 int visitctr = 0;
 
@@ -120,8 +121,6 @@ Noderef mkTRUE()        { return mknode(TRUE); }
 Noderef mkFALSE()       { return mknode(FALSE); }
 Noderef mkNIL()         { return mknode(NIL); }
 
-int ppcount;
-
 char *print_tag(Noderef p) {
   if (!p)
     return "NIL";
@@ -156,206 +155,83 @@ char *print_tag(Noderef p) {
 }
 
 
-void pp(Noderef p);
-
-void pp(Noderef p) {
-
-  if (!p)
-    return;
-
-  if (visited(p) >= visitctr)
+void pretty_print_aux(Noderef p) {
+  if (!p || visited(p) >= visitctr)
     return;
   visited(p) = visitctr;
-
-  if (ppcount++ > 300) {
-    if (trace)
-      printf("...");
-    return;
-  }
-
-  if (!p)
-    return;
-
+  char *tag = print_tag(p);
+  char *pairname = ":";
+  int nodenum = nodenumber(p);
   switch (kind(p)) {
   case INDIRECTION:
-    pp(right(p));
-    if (dag)
-      printf("\n%s_%d -> %s_%d;\n", print_tag(p), nodenumber(p), print_tag(right(p)), nodenumber(right(p)));
+    pretty_print_aux(right(p));
     break;
   case APPLY:
-    if (dag)
-      printf("\n%s_%d [label=\"@_%d\", shape=plaintext, constraint=false, ordering=out];\n", print_tag(p), nodenumber(p), nodenumber(p));
-    else
-      printf("apply_%d(", nodenumber(p));
-    pp(left(p));
-    if (dag)
-      printf("\n%s_%d -> %s_%d;\n", print_tag(p), nodenumber(p), print_tag(left(p)), nodenumber(left(p)));
-    else
-      printf(",");
-    pp(right(p));
-    if (dag)
-      printf("\n%s_%d -> %s_%d;\n", print_tag(p), nodenumber(p), print_tag(right(p)), nodenumber(right(p)));
-    else
-      printf(")");
+  case P:
+    printf("%s(", tag); 
+    pretty_print_aux(left(p));
+    printf(",");
+    pretty_print_aux(right(p));
+    printf(")");
     break;
   case NUM:
-    if (dag)
-      printf("\n%s_%d [label=\"%d\", shape=plaintext];\n", print_tag(p), nodenumber(p), num(p));
-    else
-      printf("%d", num(p));
+    printf("%d", num(p));
     break;
-  case TRUE:
-    if (dag)
-      printf("\n%s_%d [label=\"true\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("true");
-    break;
-  case FALSE:
-    if (dag)
-      printf("\n%s_%d [label=\"false\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("false");
-    break;
-  case NIL:
-    if (dag)
-      printf("\n%s_%d [label=\"nil\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("nil");
-    break;
-  case P:
-    if (dag) {
-      printf("\n%s_%d [label=\"P_%d\", shape=plaintext, constraint=false, ordering=out];\n", print_tag(p), nodenumber(p), nodenumber(p)); 
-      if (left(p))
-	printf("\n%s_%d -> %s_%d;\n", print_tag(p), nodenumber(p), print_tag(left(p)), nodenumber(left(p)));
-      pp(left(p));
-      if (right(p))
-	printf("\n%s_%d -> %s_%d;\n", print_tag(p), nodenumber(p), print_tag(right(p)), nodenumber(right(p)));
-      pp(right(p));
-    } else {
-      printf("P(");
-      pp(left(p));
-      printf(",");
-      pp(right(p));
-      printf(")");
-    }
-    break;
-  case B:
-    if (dag)
-      printf("\n%s_%d [label=\"B\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("B");
-    break;
-  case C:
-    if (dag)
-      printf("\n%s_%d [label=\"C\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("C");
-    break;
-  case S:
-    if (dag)
-      printf("\n%s_%d [label=\"S\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("S");
-    break;
-  case K:
-    if (dag)
-      printf("\n%s_%d [label=\"K\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("K");
-    break;
-  case I:
-    if (dag)
-      printf("\n%s_%d [label=\"I\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("I");
-    break;
-  case Y:
-    if (dag)
-      printf("\n%s_%d [label=\"Y\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("Y");
-    break;
-  case HEAD:
-    if (dag)
-      printf("\n%s_%d [label=\"head\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("head");
-    break;
-  case TAIL:
-    if (dag)
-      printf("\n%s_%d [label=\"tail\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("tail");
-    break;
-  case NULLP:
-    if (dag)
-      printf("\n%s_%d [label=\"null\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("null");
-    break;      
-  case PLUS:
-    if (dag)
-      printf("\n%s_%d [label=\"plus\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("plus");
-    break;
-  case MINUS:
-    if (dag)
-      printf("\n%s_%d [label=\"minus\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("minus");
-    break;
-  case TIMES:
-    if (dag)
-      printf("\n%s_%d [label=\"times\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("times");
-    break;
-  case COND:
-    if (dag)
-      printf("\n%s_%d [label=\"cond\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("cond");
-    break;
-  case EQ:
-    if (dag)
-      printf("\n%s_%d [label=\"eq\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("eq");
-    break;
-  case LT:
-    if (dag)
-      printf("\n%s_%d [label=\"lt\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("lt");
-    break;
-  case GT:
-    if (dag)
-      printf("\n%s_%d [label=\"gt\", shape=plaintext];\n", print_tag(p), nodenumber(p));
-    else
-      printf("gt");
-    break;
-    
   default:
-    fprintf(stderr, "pp: unknown kind of node: %d\n", kind(p));
+    printf("%s", tag);
     break;
   }
 }
 
-void pretty_print(Noderef p, char *prefix, char ch) {
-
-  visitctr++;
-  ppcount = 0;
-  if (dag) {
-    printf("\ndigraph G{\nsize=\"14!,14!\"\n");
-    pp(root);
-  } else if (trace) {
-    printf("%s", prefix);
-    pp(p);
+void graphviz_aux(Noderef p) {
+  if (!p || visited(p) >= visitctr)
+    return;
+  visited(p) = visitctr;
+  char *tag = print_tag(p);
+  char *pairname = ":";
+  int nodenum = nodenumber(p);
+  switch (kind(p)) {
+  case INDIRECTION:
+    fprintf(dagfp, "%s_%d -> %s_%d;\n", tag, nodenum, print_tag(right(p)), nodenumber(right(p)));
+    graphviz_aux(right(p));
+    break;
+  case APPLY:
+    pairname = "@";
+  case P:
+    fprintf(dagfp, "%s_%d [label=\"%s\", shape=plaintext, constraint=false, ordering=out];\n", tag, nodenum, pairname);
+    if (left(p)) {
+      graphviz_aux(left(p));
+      fprintf(dagfp, "%s_%d -> %s_%d;\n", tag, nodenum, print_tag(left(p)), nodenumber(left(p)));
+    }
+    if (right(p)) {
+      graphviz_aux(right(p));
+      fprintf(dagfp, "%s_%d -> %s_%d;\n", tag, nodenum, print_tag(right(p)), nodenumber(right(p)));
+    }
+    break;
+  case NUM:
+    fprintf(dagfp, "%s_%d [label=\"%d\", shape=plaintext];\n", print_tag(p), nodenumber(p), num(p));
+    break;
+  default:
+    fprintf(dagfp, "%s_%d [label=\"%s\", shape=plaintext];\n", tag, nodenum, tag);
+    break;
   }
-  if (dag)
-    printf("\n}\n");
-  else if (trace)
+}
+
+void graphviz(Noderef p) {
+  visitctr++;
+  fprintf(dagfp, "digraph G{\nsize=\"14!,14!\"\n");
+  graphviz_aux(root);
+  fprintf(dagfp, "}\n");  
+}
+
+
+void pretty_print(Noderef p, char *prefix, char ch) {
+  visitctr++;
+  if (trace) {
+    printf("%s", prefix);
+    pretty_print_aux(p);
+  }
+  if (trace)
     putchar(ch);
 }
 
@@ -505,6 +381,10 @@ void doI() { /* I x => x */
   assert(sp > 0);
   x = right(stack[sp-1]);
   sp -= 1;
+  kind(stack[sp]) = INDIRECTION;
+  right(stack[sp]) = x;
+
+  return;
   *stack[sp] = *x;
 }
 
@@ -673,11 +553,17 @@ void push(Noderef n) {
 }
 
 void reduction() {
-  pretty_print(graph, "--> ", '\n');
+  if (dag)
+    graphviz(graph);
+  if (trace)
+    pretty_print(graph, "--> ", '\n');
   while (kind(stack[sp]) == APPLY)
     push(left(stack[sp]));
   redfcns[kind(stack[sp])]();
-  pretty_print(graph, "<-- ", '\n');
+  if (dag)
+    graphviz(graph);
+  if (trace)
+    pretty_print(graph, "<-- ", '\n');
 }
 
 Noderef reduce(Noderef graph, int stack_bot) {
@@ -719,7 +605,7 @@ void print(Noderef graph) {
 
 void printlist(Noderef graph) {
   int trace_value;
-  if (graph == 0)
+  if (!graph)
     return;
   trace_value = trace;
   trace = 1;
@@ -732,22 +618,29 @@ void printlist(Noderef graph) {
 
 int main(int argc, char *argv[]) {
   root = graph = init();
+  char *usage = "Usage: %s [-t] [-d dotfile] [-h]\n\n-t: trace\n-d file: save graphviz file in file\n-h: this help\n";
 
   for (int i = 1; i < argc; i++) {
     if (argv[i][0] == '-') {
       if (argv[i][1] == 't')
 	trace = 1;
-      if (argv[i][1] == 'd')
+      if (argv[i][1] == 'd') {
 	dag = 1;
+	if (i + 1 >= argc || !strcmp(&argv[i+1][0], "-"))
+	  dagfp = stdout;
+	else
+	  assert(dagfp = fopen(&argv[i+1][0], "w"));
+      }
       if (argv[i][1] == 'h') {
-	fprintf(stderr, "Usage: %s [-tdh]\n\n-t: trace\n-d: print dag\n-h: this help\n", argv[0]);
+	fprintf(stderr, usage, argv[0]);
 	exit(0);
       }
     }
   }
 
   reduce(graph, 0);
-  if (!dag)
-    print(root);
+  print(root);			/* this may lead to further evaluation */
   printf("\n");
+  if (dag)
+    graphviz(root);		/* display the fully evaluated answer */
 }
