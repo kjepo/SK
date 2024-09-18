@@ -5,7 +5,7 @@
 
 /*
  * 
- * Graph reduction                 5/5/90 --kjepo, revised again in 2023!
+ * Graph reduction  5/5/90 --kjepo, revised again 2023 and again in 2024!
  *
  * [Turner '79, A new implementation technique for Applicative Languages]
  *
@@ -70,7 +70,6 @@ Noderef mkapply(Noderef l, Noderef r) {
 
 // not sure if P should be overloaded as both a combinator (w/o arguments)
 // and a node kind, like a cons cell.  Perhaps re-introduce CONS again?
-
 // we can't implement the P-rule as "do nothing", hoping that it will
 // be reduced when the list encounters null, head or tail.
 // The reason is that head must evaluate its argument recursively
@@ -81,15 +80,12 @@ Noderef mkapply(Noderef l, Noderef r) {
 // because head can then return x, tail can return y and null can
 // check if it's nil or not.
 
-
-
 Noderef mkpair(Noderef l, Noderef r) {
   Noderef p = mknode(P);
   left(p) = l;
   right(p) = r;
   return p;
 }
-
 
 Noderef mknum(int i) {
   Noderef p = mknode(NUM);
@@ -153,7 +149,6 @@ char *print_tag(Noderef p) {
   default: return "?";
   }
 }
-
 
 void pretty_print_aux(Noderef p) {
   if (!p || visited(p) >= visitctr)
@@ -224,7 +219,6 @@ void graphviz(Noderef p) {
   fprintf(dagfp, "}\n");  
 }
 
-
 void pretty_print(Noderef p, char *prefix, char ch) {
   visitctr++;
   if (trace) {
@@ -241,10 +235,7 @@ void pretty_print(Noderef p, char *prefix, char ch) {
   left(name) = left(name##body); \
   right(name) = right(name##body); 
 
-
-
 Noderef init() {        /* This function simulates the compiler */
-
   DEF(ex1, mkapply(mkapply(mkapply(mkS(), mkK()), mkK()), mknum(42)));
   //return ex1;
 
@@ -305,12 +296,10 @@ Noderef init() {        /* This function simulates the compiler */
    DEF(pgm, mkapply(mkapply(mkapply(mkapply(mkS(), mkB()), mkapply(mkapply(mkC(), mkB()), mkI())), mkapply(mkapply(mkC(), mkPLUS()), mknum(1))), mknum(17)));
 
    // return pgm;
-
    
   // def ack x y = if y==0 then ack (x-1) 1 else (if x==0 then y+1 else ack (x-1) (ack x (y-1)));
   // S (B S (B (C (B cond (C equal 0))) (C (B ack (C minus 1)) 1))) (S (B S (C (B B (B cond (C equal 0))) (C plus 1))) (S (B B (B ack (C minus 1))) (C (B B ack) (C minus 1))))
   DEF(ack, mkapply(mkapply(mkS(), mkapply(mkapply(mkB(), mkS()), mkapply(mkapply(mkB(), mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkEQUAL()), mknum(0))))), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), ack), mkapply(mkapply(mkC(), mkMINUS()), mknum(1)))), mknum(1))))), mkapply(mkapply(mkS(), mkapply(mkapply(mkB(), mkS()), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkB()), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkEQUAL()), mknum(0))))), mkapply(mkapply(mkC(), mkPLUS()), mknum(1))))), mkapply(mkapply(mkS(), mkapply(mkapply(mkB(), mkB()), mkapply(mkapply(mkB(), ack), mkapply(mkapply(mkC(), mkMINUS()), mknum(1))))), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkB()), ack)), mkapply(mkapply(mkC(), mkMINUS()), mknum(1)))))));
-
 
   return mkapply(range, mknum(10));
   // return mkapply(mkapply(ack, mknum(3)), mknum(8));
@@ -371,9 +360,6 @@ void doK() { /* K x y => x */
   sp -= 2;
   kind(stack[sp]) = INDIRECTION;
   right(stack[sp]) = x;
-  return;
-
-  *stack[sp] = *x;
 }
 
 void doI() { /* I x => x */
@@ -383,9 +369,6 @@ void doI() { /* I x => x */
   sp -= 1;
   kind(stack[sp]) = INDIRECTION;
   right(stack[sp]) = x;
-
-  return;
-  *stack[sp] = *x;
 }
 
 void doY() { /* Y h = h(Y h) = h(h(h(....))) */
@@ -416,7 +399,6 @@ void doUnaryOp(char op) {
     exit(1);
   }
 }
-
 
 void doBinaryOp(char op) {
   Noderef x, y;
@@ -513,7 +495,6 @@ void doNE()       { doBinaryOp('#'); }
 void doLT()       { doBinaryOp('<'); }
 void doGT()       { doBinaryOp('>'); }
 void doNOT()      { doUnaryOp('!'); }
-
 
 void doCOND() { /* COND TRUE x y => x, COND FALSE x y => y */
   Noderef pred, tnod, fnod;
