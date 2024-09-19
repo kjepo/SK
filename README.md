@@ -39,6 +39,115 @@ which is then printed as C-code:
 Noderef facp = mkapply(mkapply(mkS(), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkEQ()), mknum(0)))), mknum(1))), mkapply(mkapply(mkS(), mkTIMES()), mkapply(mkapply(mkB(), fac), mkapply(mkapply(mkC(), mkMINUS()), mknum(1)))));
 ```
 
-which I can insert in the `init` function in `sk.c` and compile and run and get a result.
+which I can insert in the `init` function in `ski.c` and compile and run and get a result.
+
+## How to use `ski.c`
+
+There's no makefile, but you can simply type `make ski` to generate the executable.
+It currently computes `range 10` which should output `10:9:8:7:6:5:4:3:2:1:nil`, i.e.,
+the representation of `[10,9,8,7,6,5,4,3,2,1]`.
+
+The program understands a couple of tracing commands: `ski -t` prints the combinator graph on stdout during execution.
+The more sophisticated `ski -d graph.dot` outputs GraphViz code to the supplied file (here, `graph.dot`).
+If you have GraphViz installed, run `dot -Tjpg -O graph.dot` to generate a bunch of JPEG files, one per execution step.
+A lot of these graphs are identical, so I recommend that you prune them, for instance with `fdupes -rdN .`
 
 My original paper listing from 1990 is scanned as a PDF file.
+
+## Grammar
+
+```
+program ::= definition program
+program ::= definition
+
+definition ::= "fn" IDENT "=" exprlist ";"
+
+exprlist ::= expr exprlist
+exprlist ::= expr
+
+expr ::= "\" IDENT "->" expr
+expr ::= "if" expr "then" expr "else" expr
+expr ::= expr "+" term
+expr ::= expr "-" term
+
+term ::= term "*" factor 
+term ::= term ":" factor
+term ::= term "=" factor
+
+factor ::= "(" exprlist ")"
+factor ::= IDENT
+factor ::= NUM
+factor ::= "true"
+factor ::= "false"
+```
+
+Example:
+
+```
+fn length = \list -> if (null list) then 0 else 1 + length (tail list)
+```
+
+```
+tokens: ID, NUM, ';', '(', ')', '+', '-', '*', '=', '\', '->', 'if', 'then', 'else', 'fun', 
+
+pre-defined functions: null, head, tail
+```
+
+```
+lines           ::= definition lines
+lines           ::= expr lines
+line            ::= empty
+
+definition      ::= "fun" identlist "=" expr ";"
+
+identlist       ::= ID identlist
+identlist       ::= ID
+
+expr            ::= "\" ID "->" expr
+expr            ::= "if" expr "then" expr "else" expr
+expr            ::= expr "+" term
+expr            ::= expr "-" term
+expr            ::= term
+
+term            ::= term "*" factor
+term            ::= factor
+
+factor          ::= simple factor
+factor          ::= simple
+
+simple          ::= '(' expr ')'
+simple          ::= ID
+simple          ::= INT
+```
+
+EBNF:
+
+```
+lines           ::= { ( definition | expr ) }
+definition      ::= "fun" ID { ID } "=" expr ";"
+expr            ::= "\" ID "->" expr
+expr            ::= "if" cond "then" expr "else" expr
+cond            ::= "!" cond
+cond            ::= expr [ "==" expr ]
+cond            ::= expr [ "!=" expr ]
+cond            ::= expr [ "<" expr ]
+cond            ::= expr [ ">" expr ]
+expr            ::= term { "+" term }
+expr            ::= term { "-" term }
+term            ::= factor { "*" factor }
+term            ::= factor { ":" factor }  // right-associative
+term            ::= "-" factor
+factor          ::= simple { simple }
+simple          ::= '(' expr ')' 
+simple          ::= ID
+simple          ::= INT
+simple          ::= []
+```
+
+FIRST (expr) = { "\", "if", "(", ID, INT }
+
+To do: introduce ":" for cons, and allow list constants like [1,2,3] and []
+
+```
+def length l = if (null l) then 0 else 1 + length (tail l)
+```
