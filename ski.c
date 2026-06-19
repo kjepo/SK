@@ -284,7 +284,6 @@ void init() {           /* builds every example, then evaluates and prints each 
 
    // P 1 (P 2 (P 3 (P 4 (P 5 (P 6 (P 7 (P 8 (P 9 (P 10 nil)))))))))
    DEF(list10, mkapply(mkapply(mkP(), mknum(1)), mkapply(mkapply(mkP(), mknum(2)), mkapply(mkapply(mkP(), mknum(3)), mkapply(mkapply(mkP(), mknum(4)), mkapply(mkapply(mkP(), mknum(5)), mkapply(mkapply(mkP(), mknum(6)), mkapply(mkapply(mkP(), mknum(7)), mkapply(mkapply(mkP(), mknum(8)), mkapply(mkapply(mkP(), mknum(9)), mkapply(mkapply(mkP(), mknum(10)), mkNIL())))))))))));
-   // return list10;
 
    // def range n = if n == 0 then [] else n : range(n-1);
    DEF(range, mkapply(mkapply(mkS(), mkapply(mkapply(mkC(), mkapply(mkapply(mkB(), mkCOND()), mkapply(mkapply(mkC(), mkEQUAL()), mknum(0)))), mkNIL())), mkapply(mkapply(mkS(), mkP()), mkapply(mkapply(mkB(), range), mkapply(mkapply(mkC(), mkMINUS()), mknum(1))))));
@@ -572,38 +571,48 @@ void push(Noderef n) {
   stack[++sp] = n;
 }
 
-void reduction() {
-  if (dag)
-    graphviz();
-  if (trace)
-    pretty_print(graph, "--> ", '\n');
 
-  while (kind(stack[sp]) == APPLY || kind(stack[sp]) == INDIRECTION)
-    if (kind(stack[sp]) == INDIRECTION)
-      stack[sp] = right(stack[sp]); /* shortcut thru the indirection */
-    else
-      push(left(stack[sp]));
-
-  redfcns[kind(stack[sp])]();
-  if (dag)
-    graphviz();
-  if (trace)
-    pretty_print(graph, "<-- ", '\n');
-}
-
-Noderef reduce(Noderef graph, int stack_bot) {
+/*
+ * reduce is one loop that keeps the spine stack across reduction steps.
+ * After a combinator fires we continue unwinding from the rewritten redex root
+ * (now at stack[sp]) instead of resetting to stack_bot and re-walking the whole spine.
+ * Any outer application nodes left below sp on the stack still supply further
+ * arguments to the result's head, so this is equivalent to the old reduce()/reduction()
+ * pair but avoids the O(depth) spine rebuild on every step.
+ *
+ */
+Noderef reduce(Noderef g, int stack_bot) {
   int save_sp = sp;
-  while (kind(graph) == APPLY || kind(graph) == INDIRECTION) {
-    if (kind(graph) == INDIRECTION) {
-      graph = right(graph);	/* follow the indirection, then re-check */
-    } else {
-      stack[sp =stack_bot] = graph;
-      reduction();		/* updates *graph (== stack[stack_bot] in place */
-    }
+  stack[sp = stack_bot] = g;             /* g is the base of this spine */
+
+  for (;;) {
+    /* unwind the left spine to the head, threading through indirections */
+    while (kind(stack[sp]) == APPLY || kind(stack[sp]) == INDIRECTION)
+      if (kind(stack[sp]) == INDIRECTION)
+        stack[sp] = right(stack[sp]);    /* shortcut thru the indirection */
+      else
+        push(left(stack[sp]));
+
+    if (redfcns[kind(stack[sp])] == doERR) /* head is a value -> weak head normal form */
+      break;
+
+    if (dag)   graphviz();
+    if (trace) pretty_print(graph, "--> ", '\n');
+    redfcns[kind(stack[sp])]();           /* fire the redex; rewrites redex root, adjusts sp */
+    if (dag)   graphviz();
+    if (trace) pretty_print(graph, "<-- ", '\n');
+    /* loop: re-unwind from the rewritten redex root, keeping outer apps below sp */
   }
+
+  g = stack[stack_bot];                   /* the WHNF result lives at the base of the spine */
+  while (kind(g) == INDIRECTION)
+    g = right(g);
   sp = save_sp;
-  return graph;
+  return g;
 }
+
+
+
 
 void printlist(Noderef);
 
