@@ -545,10 +545,12 @@ void doCOND() { /* COND TRUE x y => x, COND FALSE x y => y */
   sp -= 3;
   switch (kind(pred)) {
   case TRUE:
-    *stack[sp] = *tnod;
+    kind(stack[sp]) = INDIRECTION;	/* indirect to the chosen branch, don't copy it */
+    right(stack[sp]) = tnod;		/* (tnod is an existing, possibly-shared node) */
     break;
   case FALSE:
-    *stack[sp] = *fnod;
+    kind(stack[sp]) = INDIRECTION;
+    right(stack[sp]) = fnod;
     break;
   default:
     fprintf(stderr, "predicate wasn't boolean.\n");
